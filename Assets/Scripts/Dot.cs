@@ -1,5 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
+using System.Text;
 using UnityEngine;
 
 public class Dot : MonoBehaviour
@@ -36,12 +38,14 @@ public class Dot : MonoBehaviour
     private void OnMouseDown()
     {
         firstTouchPosition = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+        //Debug.Log($"CLICK DOT: {name} at ({column},{row})");
         //Debug.Log(firstTouchPosition);
     }
 
     private void OnMouseUp()
     {
         finalTouchPosition = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+        //Debug.Log($"CLICK UP: {name} at ({column},{row})");
         MovePieces();
     }
 
@@ -66,6 +70,7 @@ public class Dot : MonoBehaviour
 
     void SwapTile(int x, int y)
     {
+        Board.checkList.Clear();
         int newColumn = column + x;
         int newRow = row + y;
         if (newColumn < 0 || newRow < 0 || newColumn >= board.Width || newRow >= board.Height) return;
@@ -86,11 +91,17 @@ public class Dot : MonoBehaviour
             otherDotObject.name = this.gameObject.name;
             this.gameObject.name = name;
 
-            board.AllTileData[oldColumn, oldRow].gameObject= otherDotObject;
-            board.AllTileData[oldColumn, oldRow].dot = otherDot;
+            board.AllTileData[oldColumn, oldRow].SwapData(board.AllTileData[newColumn, newRow]);
 
-            board.AllTileData[newColumn, newRow].gameObject = gameObject;
-            board.AllTileData[newColumn, newRow].dot = this; 
+            Board.checkList.Add((oldColumn,oldRow) );
+            Board.checkList.Add((newColumn,newRow) );
+            StringBuilder s = new StringBuilder().Append("\n");
+            foreach ( (int a,int b) in Board.checkList)
+            {
+                s.Append(a+" "+b+"\n");
+            }
+            Debug.Log(s.ToString());
+            board.CheckMatches();
         }
     }
 
