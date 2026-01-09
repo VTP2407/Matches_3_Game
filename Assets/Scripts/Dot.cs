@@ -19,7 +19,7 @@ public class Dot : MonoBehaviour
 
     private void Start()
     {
-        board = FindObjectOfType<Board>();
+       
     }
 
     private void Update()

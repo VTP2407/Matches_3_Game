@@ -151,6 +151,17 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d9c88aad2d8e19348a469300baf1e679, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  spawnMatrix:
+  - cols: 00000000000000
+  - cols: 00000000000000
+  - cols: 00000000000000
+  - cols: 00000000000000
+  - cols: 00000000000000
+  - cols: 00000000000000
+  - cols: 00000000000000
+  - cols: 00010100010100
+  - cols: 00010100010100
+  - cols: 00000000000000
   width: 7
   height: 10
   tilePrefab: {fileID: 8968389444746649633, guid: ec9dcbd9686b9ae41b6ef47321d5e9a8, type: 3}

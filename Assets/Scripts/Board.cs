@@ -3,12 +3,18 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using UnityEngine;
+[System.Serializable]
+public class BoolRow
+{
+    public bool[] cols;
+}
 
 public class Board : MonoBehaviour
 {
     public static HashSet<(int, int)> checkList;
     public static HashSet<TileData> breakList;
 
+    public BoolRow[] spawnMatrix;
     [SerializeField] private int width;
     [SerializeField] private int height;
     [SerializeField] private GameObject tilePrefab;
@@ -21,6 +27,15 @@ public class Board : MonoBehaviour
     public TileData[,] AllTileData => allTileData;
     public int Width => width;
     public int Height => height;
+    void OnValidate()
+    {
+        if (width <= 0 || height <= 0) return;
+
+        if (spawnMatrix == null || spawnMatrix.Length != height)
+        {
+            InitSpawnMatrix();
+        }
+    }
 
     private void Start()
     {
@@ -29,6 +44,15 @@ public class Board : MonoBehaviour
         allTileData = new TileData[Width, Height];
         SetUp();
         //fixbug();
+    }
+    void InitSpawnMatrix()
+    {
+        spawnMatrix = new BoolRow[height];
+        for (int y = 0; y < height; y++)
+        {
+            spawnMatrix[y] = new BoolRow();
+            spawnMatrix[y].cols = new bool[width];
+        }
     }
 
     private void SetUp()
@@ -39,26 +63,31 @@ public class Board : MonoBehaviour
             for (int j = 0; j < height; j++)
             {
                 AllTileData[i, j] = new TileData();
-                //tạo bảng gồm các ô
-                Vector2 tempPotition = new Vector2(i, j) * marginSize;
-                GameObject backgroundTile = Instantiate(tilePrefab, tempPotition - offset, Quaternion.identity) as GameObject;
-                backgroundTile.transform.SetParent(transform);
-                backgroundTile.name = "( " + i + ", " + j + " )";
-                //tạo item trong mỗi ô
-                GameObject dotToUse = CreateItem(i, j);
-                GameObject dotGameObject = Instantiate(dotToUse, tempPotition - offset, Quaternion.identity);
-                dotGameObject.transform.SetParent(backgroundTile.transform);
-                dotGameObject.name = "( " + i + ", " + j + " )";
-                dotGameObject.transform.localScale = Vector3.one * 0.9f;
-                AllTileData[i, j].gameObject = dotGameObject;
-
-                Dot dot = dotGameObject.GetComponent<Dot>();
-                if (dot != null)
+                if (spawnMatrix[j].cols[i]==false)
                 {
-                    dot.column = i;
-                    dot.row = j;
-                    dot.board = this;
-                    AllTileData[i, j].dot = dot;
+                    //tạo bảng gồm các ô
+                    Vector2 tempPotition = new Vector2(i, j) * marginSize;
+                    GameObject backgroundTile = Instantiate(tilePrefab, tempPotition - offset, Quaternion.identity) as GameObject;
+                    backgroundTile.transform.SetParent(transform);
+                    backgroundTile.name = "( " + i + ", " + j + " )";
+                    //tạo item trong mỗi ô
+                    GameObject dotToUse = CreateItem(i, j);
+                    GameObject dotGameObject = Instantiate(dotToUse, tempPotition - offset, Quaternion.identity);
+                    dotGameObject.transform.SetParent(backgroundTile.transform);
+                    dotGameObject.name = "( " + i + ", " + j + " )";
+                    dotGameObject.transform.localScale = Vector3.one * 0.9f;
+                    AllTileData[i, j].gameObject = dotGameObject;
+
+                    Dot dot = dotGameObject.GetComponent<Dot>();
+                    if (dot != null)
+                    {
+                        dot.column = i;
+                        dot.row = j;
+                        dot.board = this;
+                        AllTileData[i, j].dot = dot;
+                        AllTileData[i, j].x = i;
+                        AllTileData[i, j].y = j;
+                    }
                 }
             }
         }
@@ -82,7 +111,7 @@ public class Board : MonoBehaviour
             int d = j - 1;
             while(u < height)
             {
-                if (allTileData[i, u].dotType == allTileData[i, j].dotType)
+                if (spawnMatrix[u].cols[i]==false && allTileData[i, u].dotType == allTileData[i, j].dotType)
                 {
                     vertical.Add(allTileData[i, u]);
                 } else break;
@@ -90,7 +119,7 @@ public class Board : MonoBehaviour
             }
             while (d >= 0)
             {
-                if (allTileData[i, d].dotType == allTileData[i, j].dotType)
+                if (spawnMatrix[d].cols[i] == false && allTileData[i, d].dotType == allTileData[i, j].dotType)
                 {
                     vertical.Add(allTileData[i, d]);
                 }
@@ -108,7 +137,7 @@ public class Board : MonoBehaviour
             int r = i + 1;
             while (r < width)
             {
-                if (allTileData[r, j].dotType == allTileData[i, j].dotType)
+                if (spawnMatrix[j].cols[r] == false && allTileData[r, j].dotType == allTileData[i, j].dotType)
                 {
                     horizontal.Add(allTileData[r, j]);
                 }else break;
@@ -116,7 +145,7 @@ public class Board : MonoBehaviour
             }
             while (l>=0)
             {
-                if (allTileData[l, j].dotType == allTileData[i, j].dotType)
+                if (spawnMatrix[j].cols[l] == false && allTileData[l, j].dotType == allTileData[i, j].dotType)
                 {
                     horizontal.Add(allTileData[l, j]);
                 }
@@ -130,11 +159,11 @@ public class Board : MonoBehaviour
             }
             Debug.Log(sb.ToString());
 
-            if (vertical.Count >= 2)
+            if (vertical.Count >= 3)
             {
                 Board.breakList.UnionWith(vertical);
             }
-            if (horizontal.Count >= 2)
+            if (horizontal.Count >= 3)
             {
                 Board.breakList.UnionWith(horizontal);
             }
@@ -183,6 +212,26 @@ public class Board : MonoBehaviour
         int idx = Random.Range(0, dots.Length);
         allTileData[x, y].dotType = idx;
         return dots[idx];
+    }
+
+    public void FillBoard()
+    {
+
+    }
+
+    public void DropItem(int i,int j)
+    {
+        while(j<height||(j<height-1 && spawnMatrix[j+1].cols[i]==false))
+        { 
+            TileData tile1 = allTileData[i,j];
+            TileData tile2 = allTileData[i,j+1];
+            tile1.SwapData(tile2);
+        }
+    }
+
+    IEnumerator SwapAnim()
+    {
+        yield return null;
     }
 
     public void fixbug()

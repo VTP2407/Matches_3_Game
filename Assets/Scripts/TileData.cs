@@ -7,6 +7,8 @@ public class TileData
     public GameObject gameObject;
     public Dot dot;
     public int dotType;
+    public int x;
+    public int y;
 
     public TileData(){}
     public void SwapData(TileData data)
