@@ -2,7 +2,9 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using Unity.VisualScripting;
 using UnityEngine;
+using static UnityEngine.GraphicsBuffer;
 [System.Serializable]
 public class BoolRow
 {
@@ -81,8 +83,7 @@ public class Board : MonoBehaviour
                     Dot dot = dotGameObject.GetComponent<Dot>();
                     if (dot != null)
                     {
-                        dot.column = i;
-                        dot.row = j;
+                        dot.tileData = allTileData[i, j];
                         dot.board = this;
                         AllTileData[i, j].dot = dot;
                         AllTileData[i, j].x = i;
@@ -106,7 +107,7 @@ public class Board : MonoBehaviour
             HashSet<TileData> vertical = new HashSet<TileData>();
             horizontal.Add(allTileData[i, j]);
             vertical.Add(allTileData[i, j]);
-            Debug.Log("tile:" + allTileData[i, j].dot.targetX+" " + allTileData[i,j].dot.targetY);
+            Debug.Log("tile:" + allTileData[i, j].dot.tileData.x+" " + allTileData[i,j].dot.tileData.y);
             int u = j + 1;
             int d = j - 1;
             while(u < height)
@@ -129,7 +130,7 @@ public class Board : MonoBehaviour
             StringBuilder s = new StringBuilder().Append("vertical\n");
             foreach (var x in vertical)
             {
-                s.Append(x.dot.targetX + " " + x.dot.targetY + "\n");
+                s.Append(x.dot.tileData.x + " " + x.dot.tileData.y + "\n");
             }
             Debug.Log(s.ToString());
 
@@ -155,7 +156,7 @@ public class Board : MonoBehaviour
             StringBuilder sb = new StringBuilder().Append("horizontal\n");
             foreach (var x in vertical)
             {
-                sb.Append(x.dot.targetX + " " + x.dot.targetY + "\n");
+                sb.Append(x.dot.tileData.x + " " + x.dot.tileData.y + "\n");
             }
             Debug.Log(sb.ToString());
 
@@ -193,7 +194,7 @@ public class Board : MonoBehaviour
                 listItem.Remove(dots[left1.dotType]);
             }
         }
-        if (y >= 3)
+        if (y >= 2)
         {
             TileData down1 = allTileData[x, y - 1];
             TileData down2 = allTileData[x, y - 2];
@@ -221,17 +222,40 @@ public class Board : MonoBehaviour
 
     public void DropItem(int i,int j)
     {
-        while(j<height||(j<height-1 && spawnMatrix[j+1].cols[i]==false))
+        while(j<height && spawnMatrix[j].cols[i]==false)
         { 
             TileData tile1 = allTileData[i,j];
-            TileData tile2 = allTileData[i,j+1];
-            tile1.SwapData(tile2);
+            TileData tile2 = allTileData[i,j-1];
+            SwapTile(i,j,i,j-1);
         }
     }
 
-    IEnumerator SwapAnim()
+    public void SwapTile(int x1, int y1,int x2,int y2)
     {
-        yield return null;
+        TileData tile1 = AllTileData[x1,y1];
+        TileData tile2 = AllTileData[x2,y2];
+
+        allTileData[x1, y1] = tile2;
+        allTileData[x2, y2] = tile1;
+
+        tile2.x = x1;tile2.y = y1;
+        tile1.x = x2;tile1.y = y2;
+
+        if(tile1.gameObject!=null)StartCoroutine(SwapAnim(tile1.gameObject,x2,y2));
+        if(tile2.gameObject!=null)StartCoroutine(SwapAnim(tile2.gameObject,x1,y1));
+    }
+
+    IEnumerator SwapAnim(GameObject o, int x, int y)
+    {
+        Vector2 targetPos = GetWorldPosition(x, y);
+        TileData tile = allTileData[x, y];
+        Debug.Log(tile.x+":"+x+ " " + tile.y+":"+y);
+        while ((new Vector2(o.transform.position.x,o.transform.position.y)-targetPos).magnitude>0.01f) 
+        {
+            o.transform.position = Vector2.MoveTowards(o.transform.position, targetPos, Time.deltaTime*3f);
+            yield return null;
+        }
+        o.transform.position = targetPos;
     }
 
     public void fixbug()
