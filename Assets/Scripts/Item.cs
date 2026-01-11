@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using Unity.VisualScripting;
+using UnityEditor;
 using UnityEngine;
 
 public class Item : MonoBehaviour
@@ -11,9 +12,17 @@ public class Item : MonoBehaviour
     public int row;
     public int type;
     public Grid grid;
+    public float speed;
+    public bool isMoving = false;
 
     private Vector2 firstTouch;
     private Vector2 lastTouch;
+
+
+    private void Start()
+    {
+        speed = 16f;
+    }
     public void SetUp(int x,int y)
     {
         col = x;
@@ -51,18 +60,31 @@ public class Item : MonoBehaviour
 
     public void SwapItem(int dx, int dy)
     {
-        grid.busy = true;
-
-        int oldCol = col;
-        int oldRow = row;   
+        if (grid.busy) return;
 
         int newCol = col + dx;
         int newRow = row + dy;
-        grid.SwapItem(col, row, newCol, newRow);
-        if (!grid.CheckMatches())
+
+        grid.StartCoroutine(grid.SwapCoroutine(col, row, newCol, newRow));
+    }
+
+    public IEnumerator MoveItemCoroutine()
+    {
+        isMoving = true;
+
+        Vector3 target = grid.GetWorldTransform(col, row);
+
+        while (Vector3.Distance(transform.position, target) > 0.01f)
         {
-            grid.SwapItem(oldCol, oldRow, newCol, newRow);
-            grid.busy = false;
+            transform.position = Vector3.MoveTowards(
+                transform.position,
+                target,
+                speed * Time.deltaTime
+            );
+            yield return null;
         }
+
+        transform.position = target;
+        isMoving = false;
     }
 }

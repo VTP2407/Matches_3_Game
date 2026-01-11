@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
@@ -22,6 +22,7 @@ public class Grid : MonoBehaviour
     public GameObject tilePrefab;
     public float marginSize;
     public bool busy;
+    public bool isRefilling;
 
     private ItemData[,] gridDatas;
 
@@ -51,6 +52,7 @@ public class Grid : MonoBehaviour
                 tile.transform.parent = transform;
 
                 gridDatas[col, row] = CreateItem(col, row);
+                gridDatas[col, row].gameObject.transform.parent = tile.transform;
             }
         }
     }
@@ -102,12 +104,49 @@ public class Grid : MonoBehaviour
         return new Vector2(col, row)*marginSize-offset;
     }
 
+    public IEnumerator SwapCoroutine(int col1, int row1, int col2, int row2)
+    {
+        busy = true;
+
+        if (!IsInside(col2, row2))
+        {
+            busy = false;
+            yield break;
+        }
+
+        ItemData a = gridDatas[col1, row1];
+        ItemData b = gridDatas[col2, row2];
+
+        if (a == null || b == null)
+        {
+            busy = false;
+            yield break;
+        }
+
+        SwapItem(col1, row1, col2, row2);
+
+        yield return StartCoroutine(SwapTransformCoroutine(a.item,b.item));
+
+        if (CheckMatches())
+        {
+            yield return StartCoroutine(ClearAndRefillCoroutine());
+        }
+        else
+        {
+            SwapItem(col2, row2, col1, row1);
+            yield return StartCoroutine(SwapTransformCoroutine(a.item, b.item));
+        }
+
+        busy = false;
+    }
+    public bool IsInside(int col, int row)
+    {
+        return col >= 0 && col < width && row >= 0 && row < height;
+    }
+
+
     public void SwapItem(int col1,int row1,int col2,int row2)
     {
-        if (col1 < 0 || col1 >= width || row1 < 0 || row1 >= height ||
-        col2 < 0 || col2 >= width || row2 < 0 || row2 >= height)
-            return;
-
         ItemData item1 = gridDatas[col1, row1];
         ItemData item2 = gridDatas[col2, row2];
 
@@ -116,30 +155,54 @@ public class Grid : MonoBehaviour
         gridDatas[col2, row2] = item1;
         gridDatas[col1, row1] = item2;
 
-        SwapTransform(item1.item, item2.item);
+        int tmpCol = item1.item.col;
+        item1.item.col = item2.item.col;
+        item2.item.col = tmpCol;
+
+        int tmpRow = item1.item.row;
+        item1.item.row = item2.item.row;
+        item2.item.row = tmpRow;
 
         listCheck.Clear();
         listCheck.Add(item1);
         listCheck.Add(item2);
     }
 
-    public void SwapTransform(Item i1, Item i2)
+    private IEnumerator SwapTransformCoroutine(Item i1, Item i2, float duration = 0.18f)
     {
-        int tmp = i1.col;
-        i1.col = i2.col;
-        i2.col = tmp;
+        Vector3 startPos1 = i1.transform.position;
+        Vector3 startPos2 = i2.transform.position;
 
-        tmp = i1.row;
-        i1.row = i2.row;
-        i2.row = tmp;
+        float t = 0f;
+        while (t < 1f)
+        {
+            t += Time.deltaTime / duration;
+            float eased = Mathf.SmoothStep(0f, 1f, t); // ease-out
 
-        Vector2 pos = i1.transform.position;
-        i1.transform.position = i2.transform.position;
-        i2.transform.position = pos;
+            if (i1 != null) i1.transform.position = Vector3.Lerp(startPos1, startPos2, eased);
+            if (i2 != null) i2.transform.position = Vector3.Lerp(startPos2, startPos1, eased);
+
+            yield return null;
+        }
+
+        // chắc chắn chạm đúng target
+        if (i1 != null) i1.transform.position = startPos2;
+        if (i2 != null) i2.transform.position = startPos1;
     }
 
+    public IEnumerator ClearAndRefillCoroutine()
+    {
+        BreakItem();
+        yield return new WaitForSeconds(0.1f);
+        yield return StartCoroutine(RefillGridCoroutine());
+        yield return new WaitForSeconds(0.1f);
+        if (CheckMatches())
+            yield return StartCoroutine(ClearAndRefillCoroutine());
+    }
     public bool CheckMatches()
     {
+        listBreak.Clear();
+
         bool check = false;
         foreach(ItemData id in listCheck)
         {
@@ -179,7 +242,6 @@ public class Grid : MonoBehaviour
         }
         if (listBreak.Count > 0) 
         {
-            BreakItem();
             check = true;
         }
         return check;
@@ -198,86 +260,126 @@ public class Grid : MonoBehaviour
             gridDatas[col, row] = null;
         }
         Debug.Log("BreakItem: "+"List Check:" + listCheck.Count + " List Break:" + listBreak.Count);
-        RefillGrid();
     }
 
-    public void RefillGrid()
+    public IEnumerator RefillGridCoroutine()
     {
-        foreach(int col in colFills)
+        // Chặn input
+        isRefilling = true;
+
+        foreach (int col in colFills)
         {
-            for(int row = 0; row < height; row++)
+            List<Item> movingItems = new List<Item>();
+
+            // ===== 1️⃣ DỒN ITEM CŨ XUỐNG (1 PHÁT) =====
+            int targetRow = 0;
+
+            for (int row = 0; row < height; row++)
             {
-                if(gridDatas[col,row] == null)
+                if (gridDatas[col, row] != null)
                 {
-                    for(int k = row + 1; k < height; k++)
+                    if (row != targetRow)
                     {
-                        if (gridDatas[col, height - 1] == null)
-                        {
-                            CreateNewItem(col, height - 1);
-                        }
-                        if(gridDatas[col, k]?.gameObject != null)
-                        {
-                            MoveItem(col,k,col,row);
-                            break;
-                        }
+                        ItemData id = gridDatas[col, row];
+
+                        gridDatas[col, row] = null;
+                        gridDatas[col, targetRow] = id;
+
+                        id.item.col = col;
+                        id.item.row = targetRow;
+
+                        StartCoroutine(MoveItemCoroutine(id.item));
+                        movingItems.Add(id.item);
                     }
-                    if (gridDatas[col, height - 1] == null)
-                    {
-                        CreateNewItem(col, height - 1);
-                    }
+
+                    targetRow++;
                 }
             }
+
+            // ===== 2️⃣ SINH ITEM MỚI Ở PHÍA TRÊN =====
+            for (int row = targetRow; row < height; row++)
+            {
+                Item item = CreateNewItem(col, row);
+                StartCoroutine(MoveItemCoroutine(item));
+                movingItems.Add(item);
+            }
+
+            // ===== 3️⃣ CHỜ TẤT CẢ ITEM RƠI XONG =====
+            yield return new WaitUntil(() =>
+            {
+                foreach (Item item in movingItems)
+                {
+                    if (item.isMoving) return false;
+                }
+                return true;
+            });
         }
-        
+
+        // ===== 4️⃣ CHUẨN BỊ CHECK MATCH =====
+        PrepareListCheck();
+
+        isRefilling = false;
+    }
+
+    private void PrepareListCheck()
+    {
         listCheck.Clear();
 
-        foreach(int col in colFills)
+        for (int col = 0; col < width; col++)
         {
-            for(int row = 0; row < height; row++)
+            for (int row = 0; row < height; row++)
             {
-                if (gridDatas[col,row] != null)
-                {
-                    listCheck.Add(gridDatas[col,row]);
-                }
+                if (gridDatas[col, row] != null)
+                    listCheck.Add(gridDatas[col, row]);
             }
         }
 
         colFills.Clear();
         listBreak.Clear();
+    }
 
-        if (CheckMatches() == false)
+
+    IEnumerator MoveItemCoroutine(Item item)
+    {
+        if (item == null) yield break;
+
+        item.isMoving = true;
+
+        Vector3 targetPos = GetWorldTransform(item.col, item.row);
+
+        while (Vector3.Distance(item.transform.position, targetPos) > 0.01f)
         {
-            busy = false;
+            item.transform.position = Vector3.MoveTowards(
+                item.transform.position,
+                targetPos,
+                Time.deltaTime * item.speed
+            );
+            yield return null;
         }
 
-        Debug.Log("List Check:"+listCheck.Count+" List Break:"+listBreak.Count);
+        item.transform.position = targetPos;
+
+        item.isMoving = false;
     }
 
-    public void MoveItem(int col1,int row1,int col2,int row2)
-    {
-        ItemData id = gridDatas[col1,row1];
 
-        gridDatas[col1,row1] = null;
-        gridDatas[col2,row2] = id;
-
-        id.item.col = col2;
-        id.item.row = row2;
-
-        id.gameObject.transform.position = GetWorldTransform(col2,row2);
-    }
-
-    public void CreateNewItem(int col,int row)
+    public Item CreateNewItem(int col,int row)
     {
         int type = Random.Range(0, itemPrefabs.Length);
-        GameObject obj = Instantiate(itemPrefabs[type], GetWorldTransform(col, row), Quaternion.identity);
+        GameObject obj = Instantiate(
+            itemPrefabs[type],
+            GetWorldTransform(col, height),
+            Quaternion.identity
+        );
+
         Item item = obj.GetComponent<Item>();
-        if (item != null)
-        {
-            gridDatas[col, row] = new ItemData(obj,item);
-            item.col = col;
-            item.row = row;
-            item.grid = this;
-            item.type = type;
-        }  
+
+        gridDatas[col, row] = new ItemData(obj, item);
+        item.col = col;
+        item.row = row;
+        item.grid = this;
+        item.type = type;
+
+        return item;
     }
 }
